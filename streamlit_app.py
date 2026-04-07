@@ -9,7 +9,7 @@ import plotly.express as px
 DATA_FILE = "transactions_data.csv"
 
 st.set_page_config(
-    page_title="Nicer Analytics",
+    page_title="Nicer",
     page_icon="💎",
     layout="wide",
 )
@@ -122,8 +122,7 @@ def parse_text(text):
 
 st.markdown("""
 <div class="hero-section">
-    <h1>💎 Nicer Analytics</h1>
-    <p>Biến các tin nhắn thông báo thành biểu đồ số dư trực quan.</p>
+    <h1>💎 Nicer</h1>
 </div>
 """, unsafe_allow_html=True)
 
@@ -182,11 +181,10 @@ if st.session_state.transactions:
         growth = ((total_this_month - last_month_upto_today) / last_month_upto_today) * 100
 
     # Stats Row
-    m1, m2, m3, m4 = st.columns(4)
-    with m1: st.metric("Tổng doanh thu hiện tại", f"{df['Balance'].iloc[-1]:,.0f} đ")
-    with m2: st.metric("Doanh thu tháng này", f"{total_this_month:,.0f} đ", delta=f"{growth:.1f}% vs tháng trước" if last_month_upto_today > 0 else None)
-    with m3: st.metric("Tổng lượt vào", f"{len(df)}")
-    with m4: st.metric("Tiền vào TB", f"{df['Amount'].mean():,.0f} đ")
+    m1, m2, m3 = st.columns(3)
+    with m1: st.metric("Doanh thu tháng này", f"{total_this_month:,.0f} đ", delta=f"{growth:.1f}% vs tháng trước" if last_month_upto_today > 0 else None)
+    with m2: st.metric("Tổng lượt vào", f"{len(df)}")
+    with m3: st.metric("Tiền vào TB", f"{df['Amount'].mean():,.0f} đ")
 
     # --- Goal Progress ---
     progress = min(1.0, total_this_month / monthly_goal) if monthly_goal > 0 else 0
@@ -202,23 +200,25 @@ if st.session_state.transactions:
     avg_daily = total_this_month / current_day if current_day > 0 else 0
     predicted_end = df['Balance'].iloc[-1] + (avg_daily * days_left)
     
-    predict_col1, predict_col2 = st.columns([2, 1])
-    with predict_col1:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 20px; border-radius: 16px; color: white; margin-bottom: 1rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.1);">
-            <div style="font-size: 0.8rem; opacity: 0.9; font-weight: 500;">Dự báo doanh thu cuối tháng ({today.strftime('%m/%Y')})</div>
-            <div style="font-size: 2rem; font-weight: 800; margin-top: 5px;">{predicted_end:,.0f} đ</div>
-            <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 5px;">Tốc độ doanh thu: {avg_daily:,.0f} đ/ngày</div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Row 1: Forecast
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 20px; border-radius: 16px; color: white; margin-bottom: 1rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.1);">
+        <div style="font-size: 0.8rem; opacity: 0.9; font-weight: 500;">Dự báo doanh thu cuối tháng ({today.strftime('%m/%Y')})</div>
+        <div style="font-size: 2rem; font-weight: 800; margin-top: 5px;">{predicted_end:,.0f} đ</div>
+        <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 5px;">Tốc độ doanh thu: {avg_daily:,.0f} đ/ngày</div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    with predict_col2:
+    # Row 2: Target & Daily Need
+    pred_col1, pred_col2 = st.columns(2)
+    
+    with pred_col1:
         if total_this_month < monthly_goal and avg_daily > 0:
             remaining = monthly_goal - total_this_month
             days_to_goal = remaining / avg_daily
             target_date = today + pd.Timedelta(days=days_to_goal)
-            
             status_color = "#10b981" if days_to_goal <= days_left else "#f59e0b"
+            
             st.markdown(f"""
             <div style="background: white; border: 1px solid #f3f4f6; padding: 20px; border-radius: 16px; height: 100%;">
                 <div style="font-size: 0.8rem; color: #6b7280;">Dự kiến đạt mục tiêu</div>
@@ -232,6 +232,18 @@ if st.session_state.transactions:
                 <div style="font-weight: 700; color: #059669;">🎉 Đã đạt mục tiêu!</div>
             </div>
             """, unsafe_allow_html=True)
+
+    with pred_col2:
+        days_rem = last_day - current_day + 1
+        daily_needed = max(0, monthly_goal - total_this_month) / days_rem if days_rem > 0 else 0
+        
+        st.markdown(f"""
+        <div style="background: white; border: 1px solid #f3f4f6; padding: 20px; border-radius: 16px; height: 100%;">
+            <div style="font-size: 0.8rem; color: #6b7280;">Doanh thu cần đạt trong ngày</div>
+            <div style="font-size: 1.2rem; font-weight: 700; color: #6366f1; margin-top: 5px;">{daily_needed:,.0f} đ/ngày</div>
+            <div style="font-size: 0.7rem; color: #9ca3af; margin-top: 5px;">Còn lại {days_rem} ngày</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.write("")
     
