@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import os
+import collections
 from datetime import datetime
 import plotly.express as px
 
@@ -152,6 +153,18 @@ if st.session_state.transactions:
     # CALCULATE CUMULATIVE BALANCE
     df['Balance'] = df['Amount'].cumsum()
     
+    # --- 1. Revenue Categorization ---
+    def categorize_revenue(content):
+        content = str(content).lower()
+        if any(x in content for x in ['dự án', 'project']): return 'Dự án'
+        if any(x in content for x in ['lẻ', 'khách']): return 'Khách lẻ'
+        if any(x in content for x in ['sàn', 'shopee', 'lazada', 'tiktok']): return 'Sàn TMĐT'
+        if any(x in content for x in ['cọc', 'deposit']): return 'Tiền cọc'
+        if any(x in content for x in ['thanh toán', 't toán']): return 'Thanh toán HĐ'
+        return 'Khác'
+    
+    df['Category'] = df['Content'].apply(categorize_revenue)
+    
     # --- Sidebar Configuration ---
     with st.sidebar:
         st.markdown("### 🎯 Mục tiêu tháng")
@@ -213,17 +226,19 @@ if st.session_state.transactions:
         """, unsafe_allow_html=True)
     
     with predict_col2:
-        if total_this_month < monthly_goal and avg_daily > 0:
+        if total_this_month < monthly_goal:
             remaining = monthly_goal - total_this_month
-            days_to_goal = remaining / avg_daily
-            target_date = today + pd.Timedelta(days=days_to_goal)
+            days_to_goal = remaining / avg_daily if avg_daily > 0 else float('inf')
+            target_date = today + pd.Timedelta(days=days_to_goal) if days_to_goal != float('inf') else None
             
-            status_color = "#10b981" if days_to_goal <= days_left else "#f59e0b"
+            # --- 2. Target Pacing ---
+            needed_per_day = remaining / days_left if days_left > 0 else remaining
+            
             st.markdown(f"""
             <div style="background: white; border: 1px solid #f3f4f6; padding: 20px; border-radius: 16px; height: 100%;">
-                <div style="font-size: 0.8rem; color: #6b7280;">Dự kiến đạt mục tiêu</div>
-                <div style="font-size: 1.2rem; font-weight: 700; color: {status_color}; margin-top: 5px;">{target_date.strftime('%d/%m/%Y')}</div>
-                <div style="font-size: 0.7rem; color: #9ca3af; margin-top: 5px;">{'Sớm hơn dự kiến' if days_to_goal <= days_left else 'Cần tăng tốc!'}</div>
+                <div style="font-size: 0.8rem; color: #6b7280;">KPI hàng ngày cần đạt</div>
+                <div style="font-size: 1.2rem; font-weight: 700; color: #ef4444; margin-top: 5px;">{needed_per_day:,.0f} đ/ngày</div>
+                <div style="font-size: 0.7rem; color: #9ca3af; margin-top: 5px;">Để đạt mục tiêu {monthly_goal:,.0f} đ</div>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -236,7 +251,9 @@ if st.session_state.transactions:
     st.write("")
     
     # Tabs
-    tab_balance, tab_list = st.tabs(["📉 Biến động doanh thu", "📝 Danh sách giao dịch"])
+    tab_balance, tab_cat, tab_weekly, tab_keywords, tab_list = st.tabs([
+        "📈 Biến động", "🏷️ Phân loại", "📅 Theo tuần", "🔍 Từ khóa", "📝 Danh sách GD"
+    ])
     
     with tab_balance:
         fig_balance = px.area(df, x='Time', y='Balance', title="Xu hướng doanh thu lũy kế",
@@ -245,6 +262,48 @@ if st.session_state.transactions:
         fig_balance.update_traces(mode="lines+markers", hovertemplate="<b>Thời gian:</b> %{x}<br><b>Tổng:</b> %{y:,.0f} đ")
         fig_balance.update_layout(hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
         st.plotly_chart(fig_balance, use_container_width=True)
+
+    with tab_cat:
+        cat_data = df.groupby('Category')['Amount'].sum().reset_index()
+        fig_cat = px.pie(cat_data, values='Amount', names='Category', title="Cơ cấu nguồn thu",
+                        hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_cat.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_cat, use_container_width=True)
+
+    with tab_weekly:
+        # --- 3. Weekly Comparison ---
+        df['Week'] = df['Time'].dt.isocalendar().week
+        weekly_data = df.groupby('Week')['Amount'].sum().reset_index()
+        weekly_data['Week Label'] = "Tuần " + (weekly_data.index + 1).astype(str)
+        
+        fig_weekly = px.bar(weekly_data, x='Week Label', y='Amount', title="Doanh thu qua từng tuần",
+                           labels={'Amount': 'Tổng tiền (đ)', 'Week Label': 'Tuần'},
+                           text_auto='.2s', color_discrete_sequence=['#a855f7'])
+        st.plotly_chart(fig_weekly, use_container_width=True)
+
+    with tab_keywords:
+        # --- 4. Top Keywords ---
+        words = []
+        for content in df['Content'].dropna():
+            # Basic cleaning and splitting
+            w = [word.lower() for word in str(content).split() if len(word) > 2]
+            words.extend(w)
+        
+        # We want keywords associated with money
+        keyword_impact = []
+        for word in set(words):
+            if words.count(word) < 2: continue # Only frequent words
+            impact = df[df['Content'].str.contains(word, case=False, na=False)]['Amount'].sum()
+            keyword_impact.append({'Keyword': word, 'Revenue': impact})
+            
+        keyword_df = pd.DataFrame(keyword_impact).sort_values('Revenue', ascending=False).head(10)
+        
+        fig_keywords = px.bar(keyword_df, x='Revenue', y='Keyword', orientation='h', 
+                             title="Top 10 từ khóa sinh lời nhất",
+                             labels={'Revenue': 'Tổng doanh thu (đ)', 'Keyword': 'Từ khóa'},
+                             color='Revenue', color_continuous_scale='Viridis')
+        fig_keywords.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_keywords, use_container_width=True)
 
     with tab_list:
         st.markdown("#### Quản lý & Tìm kiếm")
