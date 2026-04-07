@@ -63,6 +63,11 @@ st.markdown("""
 
     .stTabs [data-baseweb="tab-list"] { gap: 2rem; }
     .stTabs [data-baseweb="tab"] { height: 50px; font-weight: 600; }
+    
+    /* Progress Bar Custom */
+    .stProgress > div > div > div > div {
+        background-image: linear-gradient(to right, #6366f1 , #a855f7);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -147,48 +152,96 @@ if st.session_state.transactions:
     # CALCULATE CUMULATIVE BALANCE
     df['Balance'] = df['Amount'].cumsum()
     
-    # Stats
-    m1, m2, m3 = st.columns(3)
-    with m1: st.metric("Số dư hiện tại", f"{df['Balance'].iloc[-1]:,.0f} đ")
-    with m2: st.metric("Tổng lượt vào", f"{len(df)}")
-    with m3: st.metric("Tiền vào TB", f"{df['Amount'].mean():,.0f} đ")
+    # --- Sidebar Configuration ---
+    with st.sidebar:
+        st.markdown("### 🎯 Mục tiêu tháng")
+        monthly_goal = st.number_input("Mục tiêu doanh thu (đ)", min_value=0, value=50000000, step=1000000, format="%d")
+        st.divider()
 
-    # --- Prediction Logic ---
+    # --- Calculations for Metrics ---
     today = datetime.now()
-    last_day = (pd.Timestamp(today.year, today.month, 1) + pd.offsets.MonthEnd(0)).day
+    current_month = today.month
+    current_year = today.year
+    
+    # Current month data
+    mask_current = (df['Time'].dt.month == current_month) & (df['Time'].dt.year == current_year)
+    this_month_df = df[mask_current]
+    total_this_month = this_month_df['Amount'].sum()
+    
+    # Last month data (for comparison)
+    last_month = current_month - 1 if current_month > 1 else 12
+    last_month_year = current_year if current_month > 1 else current_year - 1
+    
+    # For a fair comparison, look at last month up to the same day
+    mask_last = (df['Time'].dt.month == last_month) & (df['Time'].dt.year == last_month_year)
+    last_month_df = df[mask_last]
+    last_month_upto_today = last_month_df[last_month_df['Time'].dt.day <= today.day]['Amount'].sum()
+    
+    growth = 0
+    if last_month_upto_today > 0:
+        growth = ((total_this_month - last_month_upto_today) / last_month_upto_today) * 100
+
+    # Stats Row
+    m1, m2, m3, m4 = st.columns(4)
+    with m1: st.metric("Số dư hiện tại", f"{df['Balance'].iloc[-1]:,.0f} đ")
+    with m2: st.metric("Doanh thu tháng này", f"{total_this_month:,.0f} đ", delta=f"{growth:.1f}% vs tháng trước" if last_month_upto_today > 0 else None)
+    with m3: st.metric("Tổng lượt vào", f"{len(df)}")
+    with m4: st.metric("Tiền vào TB", f"{df['Amount'].mean():,.0f} đ")
+
+    # --- Goal Progress ---
+    progress = min(1.0, total_this_month / monthly_goal) if monthly_goal > 0 else 0
+    
+    st.markdown(f"**Tiến độ mục tiêu tháng {current_month}: {progress*100:.1f}%** ({total_this_month:,.0f} / {monthly_goal:,.0f} đ)")
+    st.progress(progress)
+    
+    # Prediction Logic
+    last_day = (pd.Timestamp(current_year, current_month, 1) + pd.offsets.MonthEnd(0)).day
     current_day = today.day
-    days_left = last_day - current_day
+    days_left = max(0, last_day - current_day)
     
-    # Calculate daily average income
-    # Filter for current month AND year to be more accurate
-    current_month_df = df[(df['Time'].dt.month == today.month) & (df['Time'].dt.year == today.year)]
-    if not current_month_df.empty:
-        avg_daily = current_month_df['Amount'].sum() / current_day
-    else:
-        avg_daily = 0
-        
-    predicted_end = df['Balance'].iloc[-1] + (avg_daily * max(0, days_left))
+    avg_daily = total_this_month / current_day if current_day > 0 else 0
+    predicted_end = df['Balance'].iloc[-1] + (avg_daily * days_left)
     
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 20px; border-radius: 16px; color: white; margin-bottom: 2rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);">
-        <div style="font-size: 0.9rem; opacity: 0.9; font-weight: 500;">Dự kiến số dư cuối tháng ({today.strftime('%m/%Y')})</div>
-        <div style="font-size: 2.2rem; font-weight: 800; margin-top: 5px;">{predicted_end:,.0f} đ</div>
-        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 10px;">Dựa trên trung bình {avg_daily:,.0f} đ/ngày hiện tại</div>
-    </div>
-    """, unsafe_allow_html=True)
+    predict_col1, predict_col2 = st.columns([2, 1])
+    with predict_col1:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 20px; border-radius: 16px; color: white; margin-bottom: 1rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.1);">
+            <div style="font-size: 0.8rem; opacity: 0.9; font-weight: 500;">Dự kiến số dư cuối tháng ({today.strftime('%m/%Y')})</div>
+            <div style="font-size: 2rem; font-weight: 800; margin-top: 5px;">{predicted_end:,.0f} đ</div>
+            <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 5px;">Tốc độ trung bình: {avg_daily:,.0f} đ/ngày</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with predict_col2:
+        if total_this_month < monthly_goal and avg_daily > 0:
+            remaining = monthly_goal - total_this_month
+            days_to_goal = remaining / avg_daily
+            target_date = today + pd.Timedelta(days=days_to_goal)
+            
+            status_color = "#10b981" if days_to_goal <= days_left else "#f59e0b"
+            st.markdown(f"""
+            <div style="background: white; border: 1px solid #f3f4f6; padding: 20px; border-radius: 16px; height: 100%;">
+                <div style="font-size: 0.8rem; color: #6b7280;">Dự kiến đạt mục tiêu</div>
+                <div style="font-size: 1.2rem; font-weight: 700; color: {status_color}; margin-top: 5px;">{target_date.strftime('%d/%m/%Y')}</div>
+                <div style="font-size: 0.7rem; color: #9ca3af; margin-top: 5px;">{'Sớm hơn dự kiến' if days_to_goal <= days_left else 'Cần tăng tốc!'}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div style="background: #ecfdf5; border: 1px solid #10b981; padding: 20px; border-radius: 16px; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                <div style="font-weight: 700; color: #059669;">🎉 Đã đạt mục tiêu!</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     st.write("")
     
     # Tabs
-    tab_balance, tab_daily, tab_list = st.tabs(["📉 Biến động số dư", "📊 Thống kê hàng ngày", "📝 Nhật ký"])
+    tab_balance, tab_daily, tab_time, tab_list = st.tabs(["📉 Biến động", "📊 Theo ngày", "⏰ Phân tích giờ", "📝 Quản lý"])
     
     with tab_balance:
-        # Balance over time chart (Premium line chart)
-        fig_balance = px.area(df, x='Time', y='Balance', title="Biểu đồ biến động số dư lũy kế",
+        fig_balance = px.area(df, x='Time', y='Balance', title="Xu hướng số dư lũy kế",
                               labels={'Balance': 'Số dư (đ)', 'Time': 'Thời gian'},
                               line_shape='spline', color_discrete_sequence=['#6366f1'])
-        
-        # Add hover data for extra detail
         fig_balance.update_traces(mode="lines+markers", hovertemplate="<b>Thời gian:</b> %{x}<br><b>Số dư:</b> %{y:,.0f} đ")
         fig_balance.update_layout(hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
         st.plotly_chart(fig_balance, use_container_width=True)
@@ -197,36 +250,65 @@ if st.session_state.transactions:
         df['Date'] = df['Time'].dt.date
         daily_income = df.groupby('Date')['Amount'].sum().reset_index()
         
-        fig_daily = px.bar(daily_income, x='Date', y='Amount', title="Tổng tiền vào theo ngày",
-                           labels={'Amount': 'Tổng tiền (đ)', 'Date': 'Ngày'},
+        fig_daily = px.bar(daily_income, x='Date', y='Amount', title="Tổng tiền vào mỗi ngày",
+                           labels={'Amount': 'Tiền vào (đ)', 'Date': 'Ngày'},
                            color_discrete_sequence=['#8b5cf6'])
-        fig_daily.update_traces(hovertemplate="<b>Ngày:</b> %{x}<br><b>Tổng:</b> %{y:,.0f} đ")
         fig_daily.update_layout(margin=dict(t=50, b=0, l=0, r=0))
         st.plotly_chart(fig_daily, use_container_width=True)
 
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            # Count transactions per day
-            daily_count = df.groupby('Date').size().reset_index(name='Counts')
-            fig_count = px.line(daily_count, x='Date', y='Counts', title="Số lượng giao dịch theo ngày",
-                                 markers=True, color_discrete_sequence=['#ec4899'])
-            st.plotly_chart(fig_count, use_container_width=True)
-        with col_d2:
-            st.markdown("#### Chi tiết theo ngày")
-            st.dataframe(daily_income.sort_values('Date', ascending=False), use_container_width=True, hide_index=True)
+    with tab_time:
+        df['Hour'] = df['Time'].dt.hour
+        df['DayOfWeek'] = df['Time'].dt.day_name()
+        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            hour_dist = df.groupby('Hour').size().reset_index(name='Count')
+            fig_hour = px.bar(hour_dist, x='Hour', y='Count', title="Phân bổ giao dịch theo giờ",
+                              labels={'Hour': 'Giờ trong ngày', 'Count': 'Số lượng GD'},
+                              color_discrete_sequence=['#f59e0b'])
+            st.plotly_chart(fig_hour, use_container_width=True)
+        with c2:
+            day_dist = df.groupby('DayOfWeek').size().reindex(days_order).reset_index(name='Count')
+            fig_day = px.bar(day_dist, x='DayOfWeek', y='Count', title="Giao dịch theo thứ",
+                             labels={'DayOfWeek': 'Thứ', 'Count': 'Số lượng GD'},
+                             color_discrete_sequence=['#10b981'])
+            st.plotly_chart(fig_day, use_container_width=True)
 
     with tab_list:
-        st.dataframe(
-            df.sort_values('Time', ascending=False),
+        st.markdown("#### Quản lý & Tìm kiếm")
+        search_query = st.text_input("🔍 Tìm kiếm theo nội dung...", placeholder="Nhập từ khóa...")
+        
+        display_df = df.copy().sort_values('Time', ascending=False)
+        if search_query:
+            display_df = display_df[display_df['Content'].str.contains(search_query, case=False, na=False)]
+        
+        # Using data_editor for editing/deleting
+        edited_df = st.data_editor(
+            display_df[['Time', 'Amount', 'Bank', 'Content', 'Balance']],
             column_config={
                 "Amount": st.column_config.NumberColumn("Số tiền", format="%d đ"),
                 "Balance": st.column_config.NumberColumn("Số dư sau GD", format="%d đ"),
-                "Time": "Thời gian",
+                "Time": st.column_config.DatetimeColumn("Thời gian"),
                 "Bank": "Ngân hàng",
                 "Content": "Nội dung"
             },
-            use_container_width=True, hide_index=True
+            use_container_width=True, 
+            hide_index=True,
+            num_rows="dynamic" # This allows deleting rows
         )
+        
+        # Handle updates from data_editor
+        if len(edited_df) != len(display_df):
+            # Row was deleted or something changed. 
+            # Simplified logic: sync back the entire session state from edited_df
+            # Note: This is a simple sync. For large datasets, more complex logic is needed.
+            new_data = edited_df[['Amount', 'Bank', 'Time', 'Content']].to_dict('records')
+            # Add back non-displayed data if any, but here we cover all fields.
+            st.session_state.transactions = new_data
+            save_data(st.session_state.transactions)
+            st.rerun()
+
         csv = df.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 Xuất file CSV", data=csv, file_name="history.csv", mime="text/csv")
 
