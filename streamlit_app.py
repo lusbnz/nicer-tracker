@@ -155,7 +155,7 @@ if st.session_state.transactions:
     # --- Sidebar Configuration ---
     with st.sidebar:
         st.markdown("### 🎯 Mục tiêu tháng")
-        monthly_goal = st.number_input("Mục tiêu doanh thu (đ)", min_value=0, value=50000000, step=1000000, format="%d")
+        monthly_goal = st.number_input("Mục tiêu doanh thu (đ)", min_value=0, value=500000000, step=1000000, format="%d")
         st.divider()
 
     # --- Calculations for Metrics ---
@@ -183,7 +183,7 @@ if st.session_state.transactions:
 
     # Stats Row
     m1, m2, m3, m4 = st.columns(4)
-    with m1: st.metric("Số dư hiện tại", f"{df['Balance'].iloc[-1]:,.0f} đ")
+    with m1: st.metric("Tổng doanh thu hiện tại", f"{df['Balance'].iloc[-1]:,.0f} đ")
     with m2: st.metric("Doanh thu tháng này", f"{total_this_month:,.0f} đ", delta=f"{growth:.1f}% vs tháng trước" if last_month_upto_today > 0 else None)
     with m3: st.metric("Tổng lượt vào", f"{len(df)}")
     with m4: st.metric("Tiền vào TB", f"{df['Amount'].mean():,.0f} đ")
@@ -206,9 +206,9 @@ if st.session_state.transactions:
     with predict_col1:
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 20px; border-radius: 16px; color: white; margin-bottom: 1rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.1);">
-            <div style="font-size: 0.8rem; opacity: 0.9; font-weight: 500;">Dự kiến số dư cuối tháng ({today.strftime('%m/%Y')})</div>
+            <div style="font-size: 0.8rem; opacity: 0.9; font-weight: 500;">Dự báo doanh thu cuối tháng ({today.strftime('%m/%Y')})</div>
             <div style="font-size: 2rem; font-weight: 800; margin-top: 5px;">{predicted_end:,.0f} đ</div>
-            <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 5px;">Tốc độ trung bình: {avg_daily:,.0f} đ/ngày</div>
+            <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 5px;">Tốc độ doanh thu: {avg_daily:,.0f} đ/ngày</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -236,44 +236,15 @@ if st.session_state.transactions:
     st.write("")
     
     # Tabs
-    tab_balance, tab_daily, tab_time, tab_list = st.tabs(["📉 Biến động", "📊 Theo ngày", "⏰ Phân tích giờ", "📝 Quản lý"])
+    tab_balance, tab_list = st.tabs(["📉 Biến động doanh thu", "📝 Danh sách giao dịch"])
     
     with tab_balance:
-        fig_balance = px.area(df, x='Time', y='Balance', title="Xu hướng số dư lũy kế",
-                              labels={'Balance': 'Số dư (đ)', 'Time': 'Thời gian'},
+        fig_balance = px.area(df, x='Time', y='Balance', title="Xu hướng doanh thu lũy kế",
+                              labels={'Balance': 'Tổng doanh thu (đ)', 'Time': 'Thời gian'},
                               line_shape='spline', color_discrete_sequence=['#6366f1'])
-        fig_balance.update_traces(mode="lines+markers", hovertemplate="<b>Thời gian:</b> %{x}<br><b>Số dư:</b> %{y:,.0f} đ")
+        fig_balance.update_traces(mode="lines+markers", hovertemplate="<b>Thời gian:</b> %{x}<br><b>Tổng:</b> %{y:,.0f} đ")
         fig_balance.update_layout(hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
         st.plotly_chart(fig_balance, use_container_width=True)
-        
-    with tab_daily:
-        df['Date'] = df['Time'].dt.date
-        daily_income = df.groupby('Date')['Amount'].sum().reset_index()
-        
-        fig_daily = px.bar(daily_income, x='Date', y='Amount', title="Tổng tiền vào mỗi ngày",
-                           labels={'Amount': 'Tiền vào (đ)', 'Date': 'Ngày'},
-                           color_discrete_sequence=['#8b5cf6'])
-        fig_daily.update_layout(margin=dict(t=50, b=0, l=0, r=0))
-        st.plotly_chart(fig_daily, use_container_width=True)
-
-    with tab_time:
-        df['Hour'] = df['Time'].dt.hour
-        df['DayOfWeek'] = df['Time'].dt.day_name()
-        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            hour_dist = df.groupby('Hour').size().reset_index(name='Count')
-            fig_hour = px.bar(hour_dist, x='Hour', y='Count', title="Phân bổ giao dịch theo giờ",
-                              labels={'Hour': 'Giờ trong ngày', 'Count': 'Số lượng GD'},
-                              color_discrete_sequence=['#f59e0b'])
-            st.plotly_chart(fig_hour, use_container_width=True)
-        with c2:
-            day_dist = df.groupby('DayOfWeek').size().reindex(days_order).reset_index(name='Count')
-            fig_day = px.bar(day_dist, x='DayOfWeek', y='Count', title="Giao dịch theo thứ",
-                             labels={'DayOfWeek': 'Thứ', 'Count': 'Số lượng GD'},
-                             color_discrete_sequence=['#10b981'])
-            st.plotly_chart(fig_day, use_container_width=True)
 
     with tab_list:
         st.markdown("#### Quản lý & Tìm kiếm")
