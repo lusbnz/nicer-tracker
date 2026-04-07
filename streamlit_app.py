@@ -155,7 +155,6 @@ if st.session_state.transactions:
     with st.sidebar:
         st.markdown("### 🎯 Mục tiêu tháng")
         monthly_goal = st.number_input("Mục tiêu doanh thu (đ)", min_value=0, value=500000000, step=1000000, format="%d")
-        st.divider()
 
     # --- Calculations for Metrics ---
     today = datetime.now()
