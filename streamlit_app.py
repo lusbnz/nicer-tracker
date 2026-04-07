@@ -122,7 +122,7 @@ def parse_text(text):
 
 st.markdown("""
 <div class="hero-section">
-    <h1>💎 Nicer</h1>
+    <h1>Nicer</h1>
 </div>
 """, unsafe_allow_html=True)
 
@@ -248,7 +248,7 @@ if st.session_state.transactions:
     st.write("")
     
     # Tabs
-    tab_balance, tab_list = st.tabs(["📉 Biến động doanh thu", "📝 Danh sách giao dịch"])
+    tab_balance, tab_daily, tab_list = st.tabs(["📉 Biến động doanh thu", "📊 Doanh thu theo ngày", "📝 Danh sách giao dịch"])
     
     with tab_balance:
         fig_balance = px.area(df, x='Time', y='Balance', title="Xu hướng doanh thu lũy kế",
@@ -257,6 +257,44 @@ if st.session_state.transactions:
         fig_balance.update_traces(mode="lines+markers", hovertemplate="<b>Thời gian:</b> %{x}<br><b>Tổng:</b> %{y:,.0f} đ")
         fig_balance.update_layout(hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
         st.plotly_chart(fig_balance, use_container_width=True)
+
+    with tab_daily:
+        st.markdown("#### Phân tích doanh thu hàng ngày")
+        df_daily = df.copy()
+        df_daily['Date'] = df_daily['Time'].dt.date
+        daily_revenue = df_daily.groupby('Date')['Amount'].sum().reset_index()
+        
+        fig_daily = px.bar(daily_revenue, x='Date', y='Amount', 
+                           title="Biểu đồ doanh thu theo ngày",
+                           labels={'Amount': 'Doanh thu (đ)', 'Date': 'Ngày'},
+                           color_discrete_sequence=['#6366f1'])
+        
+        # Format the look and feel
+        fig_daily.update_traces(
+            hovertemplate="<b>Ngày:</b> %{x}<br><b>Doanh thu:</b> %{y:,.0f} đ",
+            marker_color='#6366f1',
+            marker_line_color='#4f46e5',
+            marker_line_width=1,
+            opacity=0.9
+        )
+        
+        fig_daily.update_layout(
+            hovermode="x unified",
+            margin=dict(t=50, b=0, l=0, r=0),
+            xaxis_title="",
+            yaxis_title="Doanh thu (VNĐ)",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+        )
+        
+        # Add a mean line for better context if there's enough data
+        if len(daily_revenue) > 1:
+            mean_rev = daily_revenue['Amount'].mean()
+            fig_daily.add_hline(y=mean_rev, line_dash="dash", line_color="#a855f7", 
+                                annotation_text=f"Trung bình: {mean_rev:,.0f} đ", 
+                                annotation_position="top right")
+
+        st.plotly_chart(fig_daily, use_container_width=True)
 
     with tab_list:
         st.markdown("#### Quản lý & Tìm kiếm")
