@@ -159,8 +159,23 @@ if st.session_state.transactions:
 
     # --- Calculations for Metrics ---
     today = datetime.now()
+    current_date = today.date()
     current_month = today.month
     current_year = today.year
+    
+    # Yesterday for comparison (optional but good for context)
+    yesterday_date = current_date - pd.Timedelta(days=1)
+    
+    # Today's data
+    mask_today = df['Time'].dt.date == current_date
+    today_df = df[mask_today]
+    total_today = today_df['Amount'].sum()
+    count_today = len(today_df)
+    
+    # Yesterday's data
+    mask_yesterday = df['Time'].dt.date == yesterday_date
+    yesterday_df = df[mask_yesterday]
+    total_yesterday = yesterday_df['Amount'].sum()
     
     # Current month data
     mask_current = (df['Time'].dt.month == current_month) & (df['Time'].dt.year == current_year)
@@ -180,7 +195,41 @@ if st.session_state.transactions:
     if last_month_upto_today > 0:
         growth = ((total_this_month - last_month_upto_today) / last_month_upto_today) * 100
 
-    # Stats Row
+    # Daily target calculation
+    last_day = (pd.Timestamp(current_year, current_month, 1) + pd.offsets.MonthEnd(0)).day
+    current_day = today.day
+    days_rem = last_day - current_day + 1
+    days_left = max(0, last_day - current_day)
+    daily_needed = max(0, monthly_goal - (total_this_month - total_today)) / (days_rem + (current_day - 1) if current_day > 1 else last_day) # Average daily to hit goal
+    # Actually, more simple: (monthly_goal / last_day) is the baseline daily target. 
+    # Or: Remaining goal / days left.
+    daily_target = monthly_goal / last_day
+    
+    # Today's progress
+    progress_today = min(1.0, total_today / daily_target) if daily_target > 0 else (1.0 if total_today > 0 else 0)
+    
+    # Growth today vs yesterday
+    growth_today = total_today - total_yesterday
+    growth_today_pct = ((total_today - total_yesterday) / total_yesterday * 100) if total_yesterday > 0 else 0
+
+    # --- Today Summary Row ---
+    st.markdown("### 📅 Hôm nay")
+    t1, t2, t3 = st.columns(3)
+    
+    delta_today_val = total_today - daily_target
+    
+    with t1:
+        st.metric("Doanh thu hôm nay", f"{total_today:,.0f} đ", delta=f"{growth_today:+, .0f} đ" if total_yesterday > 0 else None)
+    with t2:
+        st.metric("Lượt vào hôm nay", f"{count_today}")
+    with t3:
+        st.metric("Tiến độ hôm nay", f"{progress_today*100:.1f}%", delta=f"{delta_today_val:,.0f} đ so với mục tiêu")
+    
+    st.progress(progress_today)
+    st.write("")
+
+    # --- Monthly Metrics ---
+    st.markdown("### 📈 Hiệu suất tháng")
     m1, m2, m3 = st.columns(3)
     with m1: st.metric("Doanh thu tháng này", f"{total_this_month:,.0f} đ", delta=f"{growth:.1f}% vs tháng trước" if last_month_upto_today > 0 else None)
     with m2: st.metric("Tổng lượt vào", f"{len(df)}")
@@ -193,10 +242,6 @@ if st.session_state.transactions:
     st.progress(progress)
     
     # Prediction Logic
-    last_day = (pd.Timestamp(current_year, current_month, 1) + pd.offsets.MonthEnd(0)).day
-    current_day = today.day
-    days_left = max(0, last_day - current_day)
-    
     avg_daily = total_this_month / current_day if current_day > 0 else 0
     predicted_end = df['Balance'].iloc[-1] + (avg_daily * days_left)
     
@@ -342,11 +387,5 @@ else:
 
 # --- Sidebar ---
 with st.sidebar:
-    st.markdown("### 🎛️ Quản lý")
-    if st.button("🗑️ Xóa sạch toàn bộ lịch sử", use_container_width=True):
-        st.session_state.transactions = []
-        if os.path.exists(DATA_FILE): os.remove(DATA_FILE)
-        st.rerun()
-    st.divider()
-    st.caption("Dữ liệu được lưu tại local: %s" % DATA_FILE)
-    st.caption("Sử dụng kỹ thuật tính toán lũy kế (Cumulative Sum) để vẽ biểu đồ biến động.")
+    st.markdown("---")
+    st.caption("Nicer © 2024")
