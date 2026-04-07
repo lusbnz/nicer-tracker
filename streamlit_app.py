@@ -219,7 +219,7 @@ if st.session_state.transactions:
     delta_today_val = total_today - daily_target
     
     with t1:
-        st.metric("Doanh thu hôm nay", f"{total_today:,.0f} đ", delta=f"{growth_today:+, .0f} đ" if total_yesterday > 0 else None)
+        st.metric("Doanh thu hôm nay", f"{total_today:,.0f} đ", delta=f"{growth_today:+,.0f} đ" if total_yesterday > 0 else None)
     with t2:
         st.metric("Lượt vào hôm nay", f"{count_today}")
     with t3:
