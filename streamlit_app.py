@@ -40,6 +40,10 @@ st.markdown("""
         padding: 20px;
         border-radius: 16px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        min-height: 160px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     
     [data-testid="stMetricValue"] {
@@ -175,6 +179,7 @@ if st.session_state.transactions:
     mask_yesterday = df['Time'].dt.date == yesterday_date
     yesterday_df = df[mask_yesterday]
     total_yesterday = yesterday_df['Amount'].sum()
+    count_yesterday = len(yesterday_df)
     
     # Current month data
     mask_current = (df['Time'].dt.month == current_month) & (df['Time'].dt.year == current_year)
@@ -199,7 +204,6 @@ if st.session_state.transactions:
     current_day = today.day
     days_rem = last_day - current_day + 1
     days_left = max(0, last_day - current_day)
-    daily_needed = max(0, monthly_goal - (total_this_month - total_today)) / (days_rem + (current_day - 1) if current_day > 1 else last_day) # Average daily to hit goal
     # Actually, more simple: (monthly_goal / last_day) is the baseline daily target. 
     # Or: Remaining goal / days left.
     daily_target = monthly_goal / last_day
@@ -209,10 +213,10 @@ if st.session_state.transactions:
     
     # Growth today vs yesterday
     growth_today = total_today - total_yesterday
-    growth_today_pct = ((total_today - total_yesterday) / total_yesterday * 100) if total_yesterday > 0 else 0
+    growth_count = count_today - count_yesterday
 
     # --- Today Summary Row ---
-    st.markdown("### 📅 Hôm nay")
+    st.markdown("### Hôm nay")
     t1, t2, t3 = st.columns(3)
     
     delta_today_val = total_today - daily_target
@@ -220,7 +224,7 @@ if st.session_state.transactions:
     with t1:
         st.metric("Doanh thu hôm nay", f"{total_today:,.0f} đ", delta=f"{growth_today:+,.0f} đ" if total_yesterday > 0 else None)
     with t2:
-        st.metric("Lượt vào hôm nay", f"{count_today}")
+        st.metric("Lượt vào hôm nay", f"{count_today}", delta=f"{growth_count:+d} lượt" if count_yesterday > 0 else None)
     with t3:
         st.metric("Tiến độ hôm nay", f"{progress_today*100:.1f}%", delta=f"{delta_today_val:,.0f} đ so với mục tiêu")
     
@@ -228,7 +232,7 @@ if st.session_state.transactions:
     st.write("")
 
     # --- Monthly Metrics ---
-    st.markdown("### 📈 Hiệu suất tháng")
+    st.markdown("### Hiệu suất tháng")
     m1, m2, m3 = st.columns(3)
     with m1: st.metric("Doanh thu tháng này", f"{total_this_month:,.0f} đ", delta=f"{growth:.1f}% vs tháng trước" if last_month_upto_today > 0 else None)
     with m2: st.metric("Tổng lượt vào", f"{len(df)}")
