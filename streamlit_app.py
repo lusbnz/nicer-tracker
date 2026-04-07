@@ -384,8 +384,3 @@ else:
     with col_empty2:
         st.info("💡 Hệ thống đang sẵn sàng. Hãy dán giao dịch 'Nicer' của bạn để xem biểu đồ biến động số dư theo thời gian!")
         st.image("https://illustrations.popsy.co/blue/digital-marketing-analysis.svg")
-
-# --- Sidebar ---
-with st.sidebar:
-    st.markdown("---")
-    st.caption("Nicer © 2024")
