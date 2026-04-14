@@ -174,7 +174,7 @@ st.markdown("""
 
 with st.container():
     input_expanded = not bool(st.session_state.transactions)
-    with st.expander("📥 Nhập dữ liệu giao dịch mới", expanded=input_expanded):
+    with st.expander("📥 Dán dữ liệu giao dịch mới", expanded=input_expanded):
         col1, col2 = st.columns([4, 1])
         with col1:
             raw_input = st.text_area("Dán nội dung giao dịch...", height=120, label_visibility="collapsed", placeholder="Dán nội dung 'Tiền vào ae Nicer ơi!'...")
@@ -188,26 +188,49 @@ with st.container():
                         st.toast(f"Đã thêm {new_count} giao dịch!", icon='✅')
                         st.rerun()
                     else: st.toast("Không tìm thấy dữ liệu mới.", icon='⚠️')
-        
-        st.markdown("---")
-        st.write("📂 **Tải lên file CSV**")
-        up_col1, up_col2 = st.columns([3, 2])
-        with up_col1:
-            uploaded_file = st.file_uploader("Chọn file CSV", type=["csv"], label_visibility="collapsed")
-        with up_col2:
-            template_df = pd.DataFrame(columns=['Amount', 'Bank', 'Time', 'Content'])
-            template_csv = template_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📄 Tải file mẫu", data=template_csv, file_name="template.csv", mime="text/csv", use_container_width=True)
-            
-        if uploaded_file:
-            if st.button("Import CSV 📤", use_container_width=True, type="secondary"):
-                new_count = handle_csv_upload(uploaded_file)
-                if new_count:
-                    st.balloons()
-                    st.toast(f"Đã thêm {new_count} giao dịch từ CSV!", icon='✅')
-                    st.rerun()
-                else:
-                    st.toast("Không có dữ liệu mới từ CSV.", icon='ℹ️')
+
+# --- Sidebar Configuration ---
+with st.sidebar:
+    st.markdown("### ⚙️ Cài đặt")
+    monthly_goal = st.number_input("Mục tiêu doanh thu (đ)", min_value=0, value=500000000, step=1000000, format="%d")
+    
+    st.markdown("---")
+    st.markdown("### 📥 Import dữ liệu")
+    uploaded_file = st.file_uploader("Tải lên file CSV", type=["csv"])
+    if uploaded_file:
+        if st.button("Xác nhận Import 🚀", use_container_width=True, type="primary"):
+            new_count = handle_csv_upload(uploaded_file)
+            if new_count:
+                st.balloons()
+                st.toast(f"Đã thêm {new_count} giao dịch!", icon='✅')
+                st.rerun()
+            else:
+                st.toast("Không tìm thấy dữ liệu mới.", icon='⚠️')
+    
+    # Download template always available
+    template_df = pd.DataFrame(columns=['Amount', 'Bank', 'Time', 'Content'])
+    template_csv = template_df.to_csv(index=False).encode('utf-8-sig')
+    st.download_button(
+        label="📄 Tải file mẫu CSV",
+        data=template_csv,
+        file_name="template_nicer.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    st.markdown("---")
+    st.markdown("### 📤 Export dữ liệu")
+    if st.session_state.transactions:
+        csv_data = pd.DataFrame(st.session_state.transactions).to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 Tải xuống CSV",
+            data=csv_data,
+            file_name=f"nicer_transactions_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    else:
+        st.info("Chưa có dữ liệu để xuất.")
 
 if st.session_state.transactions:
     df = pd.DataFrame(st.session_state.transactions)
@@ -216,36 +239,6 @@ if st.session_state.transactions:
     
     # CALCULATE CUMULATIVE BALANCE
     df['Balance'] = df['Amount'].cumsum()
-    
-    # --- Sidebar Configuration ---
-    with st.sidebar:
-        st.markdown("### ⚙️ Quản lý & Mục tiêu")
-        monthly_goal = st.number_input("Mục tiêu doanh thu (đ)", min_value=0, value=500000000, step=1000000, format="%d")
-        
-        st.markdown("---")
-        st.markdown("### 💾 Lưu trữ")
-        if st.session_state.transactions:
-            df_export = pd.DataFrame(st.session_state.transactions)
-            csv_data = df_export.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 Tải xuống CSV",
-                data=csv_data,
-                file_name=f"nicer_transactions_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-            
-            # Template for upload
-            template_df = pd.DataFrame(columns=['Amount', 'Bank', 'Time', 'Content'])
-            template_csv = template_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📄 Tải file mẫu CSV",
-                data=template_csv,
-                file_name="template_nicer.csv",
-                mime="text/csv",
-                use_container_width=True,
-                help="Tải file mẫu để biết định dạng cột cần thiết để upload."
-            )
 
     # --- Calculations for Metrics ---
     today = datetime.now()
