@@ -122,6 +122,48 @@ def parse_text(text):
         save_data(st.session_state.transactions)
     return added
 
+def handle_csv_upload(uploaded_file):
+    try:
+        new_df = pd.read_csv(uploaded_file, encoding='utf-8-sig')
+        # Basic validation: check if required columns exist
+        required_cols = ['Amount', 'Bank', 'Time', 'Content']
+        if not all(col in new_df.columns for col in required_cols):
+            st.error(f"File CSV thiếu cột. Cần có: {', '.join(required_cols)}")
+            return 0
+        
+        added = 0
+        for _, row in new_df.iterrows():
+            try:
+                val = float(row['Amount'])
+                bank = str(row['Bank']).strip()
+                # Use pd.to_datetime to normalize various date formats
+                time_val = pd.to_datetime(row['Time'])
+                time_str = time_val.strftime("%Y-%m-%d %H:%M:%S")
+                content = str(row['Content']).strip()
+                
+                entry = {'Amount': val, 'Bank': bank, 'Time': time_str, 'Content': content}
+                
+                # Duplicate check based on Amount AND Time
+                # We normalize the stored time to string for comparison
+                is_duplicate = any(
+                    t['Amount'] == val and 
+                    (pd.to_datetime(t['Time']).strftime("%Y-%m-%d %H:%M:%S") == time_str)
+                    for t in st.session_state.transactions
+                )
+                
+                if not is_duplicate:
+                    st.session_state.transactions.append(entry)
+                    added += 1
+            except: continue
+            
+        if added > 0:
+            save_data(st.session_state.transactions)
+            
+        return added
+    except Exception as e:
+        st.error(f"Lỗi khi xử lý file CSV: {e}")
+        return 0
+
 # --- UI Components ---
 
 st.markdown("""
@@ -146,6 +188,26 @@ with st.container():
                         st.toast(f"Đã thêm {new_count} giao dịch!", icon='✅')
                         st.rerun()
                     else: st.toast("Không tìm thấy dữ liệu mới.", icon='⚠️')
+        
+        st.markdown("---")
+        st.write("📂 **Tải lên file CSV**")
+        up_col1, up_col2 = st.columns([3, 2])
+        with up_col1:
+            uploaded_file = st.file_uploader("Chọn file CSV", type=["csv"], label_visibility="collapsed")
+        with up_col2:
+            template_df = pd.DataFrame(columns=['Amount', 'Bank', 'Time', 'Content'])
+            template_csv = template_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("📄 Tải file mẫu", data=template_csv, file_name="template.csv", mime="text/csv", use_container_width=True)
+            
+        if uploaded_file:
+            if st.button("Import CSV 📤", use_container_width=True, type="secondary"):
+                new_count = handle_csv_upload(uploaded_file)
+                if new_count:
+                    st.balloons()
+                    st.toast(f"Đã thêm {new_count} giao dịch từ CSV!", icon='✅')
+                    st.rerun()
+                else:
+                    st.toast("Không có dữ liệu mới từ CSV.", icon='ℹ️')
 
 if st.session_state.transactions:
     df = pd.DataFrame(st.session_state.transactions)
@@ -157,8 +219,33 @@ if st.session_state.transactions:
     
     # --- Sidebar Configuration ---
     with st.sidebar:
-        st.markdown("### 🎯 Mục tiêu tháng")
+        st.markdown("### ⚙️ Quản lý & Mục tiêu")
         monthly_goal = st.number_input("Mục tiêu doanh thu (đ)", min_value=0, value=500000000, step=1000000, format="%d")
+        
+        st.markdown("---")
+        st.markdown("### 💾 Lưu trữ")
+        if st.session_state.transactions:
+            df_export = pd.DataFrame(st.session_state.transactions)
+            csv_data = df_export.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Tải xuống CSV",
+                data=csv_data,
+                file_name=f"nicer_transactions_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+            
+            # Template for upload
+            template_df = pd.DataFrame(columns=['Amount', 'Bank', 'Time', 'Content'])
+            template_csv = template_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📄 Tải file mẫu CSV",
+                data=template_csv,
+                file_name="template_nicer.csv",
+                mime="text/csv",
+                use_container_width=True,
+                help="Tải file mẫu để biết định dạng cột cần thiết để upload."
+            )
 
     # --- Calculations for Metrics ---
     today = datetime.now()
@@ -372,14 +459,15 @@ if st.session_state.transactions:
             # Row was deleted or something changed. 
             # Simplified logic: sync back the entire session state from edited_df
             # Note: This is a simple sync. For large datasets, more complex logic is needed.
-            new_data = edited_df[['Amount', 'Bank', 'Time', 'Content']].to_dict('records')
-            # Add back non-displayed data if any, but here we cover all fields.
-            st.session_state.transactions = new_data
+            # Standardize Time back to string format
+            new_df_sync = edited_df[['Amount', 'Bank', 'Time', 'Content']].copy()
+            new_df_sync['Time'] = new_df_sync['Time'].dt.strftime("%Y-%m-%d %H:%M:%S")
+            st.session_state.transactions = new_df_sync.to_dict('records')
             save_data(st.session_state.transactions)
             st.rerun()
 
-        csv = df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 Xuất file CSV", data=csv, file_name="history.csv", mime="text/csv")
+        # Handled in sidebar now
+        pass
 
 else:
     st.write("")
